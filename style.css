@@ -1,0 +1,74 @@
+#piHeader {
+    position: relative;
+    margin-bottom: 4px;
+    text-align: left;
+}
+
+#piRawPane,
+#piFormattedPane {
+    text-align: left;
+}
+
+#piTabs {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    gap: 4px;
+}
+
+.pi-tab {
+    padding: 2px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid rgba(128,128,128,0.4);
+    border-radius: 4px;
+    background: rgba(0,0,0,0.2);
+    color: inherit;
+    opacity: 0.6;
+}
+
+.pi-tab-active {
+    opacity: 1;
+    border-color: rgba(128,128,128,0.8);
+    background: rgba(255,255,255,0.08);
+}
+
+.pi-message {
+    margin-bottom: 16px;
+}
+
+.pi-role {
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.5;
+    margin-bottom: 4px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid rgba(128,128,128,0.2);
+}
+
+.pi-content {
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    line-height: 1.5;
+    margin: 0;
+    padding: 6px 8px;
+    background: rgba(0,0,0,0.15);
+    border-radius: 4px;
+    user-select: text;
+}
+
+@media screen and (max-width: 1000px) {
+    #piHeader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    #piTabs {
+        position: unset;
+        margin-top: 4px;
+    }
+}

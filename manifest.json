@@ -1,0 +1,12 @@
+{
+    "display_name": "Prompt Inspector (memU fork)",
+    "loading_order": 5,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Cohee1207 / memU fork",
+    "version": "1.0.0",
+    "homePage": "",
+    "auto_update": false
+}
