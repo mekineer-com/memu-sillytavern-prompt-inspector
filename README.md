@@ -1,6 +1,6 @@
 # Prompt Inspector — memU fork
 
-**Power users only.** This extension lets you view and edit the raw JSON sent to the LLM before each generation. Editing malformed JSON will break generation silently or loudly. If you don't know what a JSON prompt array is, this tool is not for you.
+**Power users only.** This extension lets you view and edit the raw JSON sent to the LLM before each generation. A single misplaced character will produce malformed JSON and break generation silently or loudly. If you don't know what a JSON prompt array is, this tool is not for you.
 
 ## What it is
 
