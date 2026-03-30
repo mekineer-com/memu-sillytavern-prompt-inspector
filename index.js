@@ -36,12 +36,11 @@ function addLaunchButton() {
     launchButton.appendChild(textSpan);
 
     const extensionsMenu = document.getElementById('prompt_inspector_wand_container') ?? document.getElementById('extensionsMenu');
-    extensionsMenu.classList.add('interactable');
-    extensionsMenu.tabIndex = 0;
-
     if (!extensionsMenu) {
         throw new Error('Could not find the extensions menu');
     }
+    extensionsMenu.classList.add('interactable');
+    extensionsMenu.tabIndex = 0;
 
     extensionsMenu.appendChild(launchButton);
     launchButton.addEventListener('click', () => {
@@ -59,39 +58,58 @@ function toggleInspectNext() {
     localStorage.setItem('promptInspectorEnabled', String(inspectEnabled));
 }
 
-function renderFormatted(json) {
-    const frag = document.createDocumentFragment();
+function makeInfo(text, style = '') {
+    const d = document.createElement('div');
+    d.style.cssText = style;
+    d.textContent = text;
+    return d;
+}
+
+function makeFormattedMessage(msg) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'pi-message';
+    const roleDiv = document.createElement('div');
+    roleDiv.className = 'pi-role';
+    roleDiv.textContent = String(msg.role || 'unknown');
+    const pre = document.createElement('pre');
+    pre.className = 'pi-content';
+    pre.textContent = String(msg.content || '');
+    wrapper.appendChild(roleDiv);
+    wrapper.appendChild(pre);
+    return wrapper;
+}
+
+function mountFormatted(json, formattedPane) {
     let messages;
     try {
         messages = JSON.parse(json);
     } catch {
-        const d = document.createElement('div');
-        d.style.cssText = 'opacity:0.5;font-style:italic';
-        d.textContent = '(not valid JSON — switch to Raw to edit)';
-        frag.appendChild(d);
-        return frag;
+        formattedPane.appendChild(makeInfo('(not valid JSON — switch to Raw to edit)', 'opacity:0.5;font-style:italic'));
+        return () => { };
     }
     if (!Array.isArray(messages)) {
-        const d = document.createElement('div');
-        d.style.opacity = '0.5';
-        d.textContent = '(not a message array)';
-        frag.appendChild(d);
-        return frag;
+        formattedPane.appendChild(makeInfo('(not a message array)', 'opacity:0.5'));
+        return () => { };
     }
-    for (const msg of messages) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'pi-message';
-        const roleDiv = document.createElement('div');
-        roleDiv.className = 'pi-role';
-        roleDiv.textContent = String(msg.role || 'unknown');
-        const pre = document.createElement('pre');
-        pre.className = 'pi-content';
-        pre.textContent = String(msg.content || '');
-        wrapper.appendChild(roleDiv);
-        wrapper.appendChild(pre);
-        frag.appendChild(wrapper);
-    }
-    return frag;
+    let cancelled = false;
+    let index = 0;
+    const chunkSize = 40;
+    const appendChunk = () => {
+        if (cancelled) return;
+        const frag = document.createDocumentFragment();
+        const end = Math.min(index + chunkSize, messages.length);
+        for (; index < end; index++) {
+            frag.appendChild(makeFormattedMessage(messages[index]));
+        }
+        formattedPane.appendChild(frag);
+        if (index < messages.length) {
+            requestAnimationFrame(appendChunk);
+        }
+    };
+    appendChunk();
+    return () => {
+        cancelled = true;
+    };
 }
 
 async function showPromptInspector(input) {
@@ -103,16 +121,22 @@ async function showPromptInspector(input) {
     const formattedPane = template.find('#piFormattedPane')[0];
     const tabRaw = template.find('#piTabRaw')[0];
     const tabFormatted = template.find('#piTabFormatted')[0];
+    let detachFormatted = null;
 
     function showTab(tab) {
         if (tab === 'formatted') {
             formattedPane.innerHTML = '';
-            formattedPane.appendChild(renderFormatted(textarea.val()));
+            if (detachFormatted) detachFormatted();
+            detachFormatted = mountFormatted(textarea.val(), formattedPane);
             rawPane.style.display = 'none';
             formattedPane.style.display = '';
             tabRaw.classList.remove('pi-tab-active');
             tabFormatted.classList.add('pi-tab-active');
         } else {
+            if (detachFormatted) {
+                detachFormatted();
+                detachFormatted = null;
+            }
             formattedPane.innerHTML = '';
             rawPane.style.display = '';
             formattedPane.style.display = 'none';
@@ -135,6 +159,10 @@ async function showPromptInspector(input) {
     };
     const popup = new Popup(template, POPUP_TYPE.CONFIRM, '', { wide: true, large: true, okButton: 'Save changes', cancelButton: 'Discard changes', customButtons: [customButton] });
     const result = await popup.show();
+    if (detachFormatted) {
+        detachFormatted();
+        detachFormatted = null;
+    }
 
     if (!result) {
         return input;
