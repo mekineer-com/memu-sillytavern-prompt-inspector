@@ -60,18 +60,38 @@ function toggleInspectNext() {
 }
 
 function renderFormatted(json) {
+    const frag = document.createDocumentFragment();
+    let messages;
     try {
-        const messages = JSON.parse(json);
-        if (!Array.isArray(messages)) return '<div style="opacity:0.5">(not a message array)</div>';
-        return messages.map(msg => {
-            const role = String(msg.role || 'unknown');
-            const content = String(msg.content || '');
-            const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            return `<div class="pi-message"><div class="pi-role">${role}</div><pre class="pi-content">${escaped}</pre></div>`;
-        }).join('');
+        messages = JSON.parse(json);
     } catch {
-        return '<div style="opacity:0.5;font-style:italic">(not valid JSON — switch to Raw to edit)</div>';
+        const d = document.createElement('div');
+        d.style.cssText = 'opacity:0.5;font-style:italic';
+        d.textContent = '(not valid JSON — switch to Raw to edit)';
+        frag.appendChild(d);
+        return frag;
     }
+    if (!Array.isArray(messages)) {
+        const d = document.createElement('div');
+        d.style.opacity = '0.5';
+        d.textContent = '(not a message array)';
+        frag.appendChild(d);
+        return frag;
+    }
+    for (const msg of messages) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'pi-message';
+        const roleDiv = document.createElement('div');
+        roleDiv.className = 'pi-role';
+        roleDiv.textContent = String(msg.role || 'unknown');
+        const pre = document.createElement('pre');
+        pre.className = 'pi-content';
+        pre.textContent = String(msg.content || '');
+        wrapper.appendChild(roleDiv);
+        wrapper.appendChild(pre);
+        frag.appendChild(wrapper);
+    }
+    return frag;
 }
 
 async function showPromptInspector(input) {
@@ -86,12 +106,14 @@ async function showPromptInspector(input) {
 
     function showTab(tab) {
         if (tab === 'formatted') {
-            formattedPane.innerHTML = renderFormatted(textarea.val());
+            formattedPane.innerHTML = '';
+            formattedPane.appendChild(renderFormatted(textarea.val()));
             rawPane.style.display = 'none';
             formattedPane.style.display = '';
             tabRaw.classList.remove('pi-tab-active');
             tabFormatted.classList.add('pi-tab-active');
         } else {
+            formattedPane.innerHTML = '';
             rawPane.style.display = '';
             formattedPane.style.display = 'none';
             tabFormatted.classList.remove('pi-tab-active');
@@ -124,7 +146,7 @@ async function showPromptInspector(input) {
 eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, async (data) => {
     if (!inspectEnabled || data.dryRun || !isChatCompletion()) return;
 
-    const promptJson = JSON.stringify(data.chat, null, 4);
+    const promptJson = JSON.stringify(data.chat);
     const result = await showPromptInspector(promptJson);
 
     if (result === promptJson) return;
@@ -132,7 +154,8 @@ eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, async (data) => {
     try {
         const chat = JSON.parse(result);
         if (Array.isArray(chat) && Array.isArray(data.chat)) {
-            data.chat.splice(0, data.chat.length, ...chat);
+            data.chat.length = 0;
+            for (const item of chat) data.chat.push(item);
         }
     } catch {
         toastr.error('Invalid JSON');
