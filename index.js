@@ -51,6 +51,13 @@ function addLaunchButton() {
 }
 
 let inspectEnabled = localStorage.getItem('promptInspectorEnabled') === 'true' || false;
+let generationCancelled = false;
+
+function consumeGenerationCancelled() {
+    if (!generationCancelled) return false;
+    generationCancelled = false;
+    return true;
+}
 
 function toggleInspectNext() {
     inspectEnabled = !inspectEnabled;
@@ -77,6 +84,62 @@ function makeFormattedMessage(msg) {
     wrapper.appendChild(roleDiv);
     wrapper.appendChild(pre);
     return wrapper;
+}
+
+function contentText(raw) {
+    if (typeof raw === 'string') return raw.trim();
+    if (Array.isArray(raw)) {
+        return raw
+            .map((part) => {
+                if (typeof part === 'string') return part;
+                if (part && typeof part === 'object' && typeof part.text === 'string') return part.text;
+                return '';
+            })
+            .filter(Boolean)
+            .join('\n')
+            .trim();
+    }
+    if (raw && typeof raw === 'object' && typeof raw.text === 'string') return raw.text.trim();
+    return '';
+}
+
+function lastUserTextFromContext() {
+    const ctx = globalThis.SillyTavern?.getContext?.();
+    const chat = Array.isArray(ctx?.chat) ? ctx.chat : [];
+    const userName = String(ctx?.name1 || '');
+    for (let i = chat.length - 1; i >= 0; i--) {
+        const row = chat[i];
+        const isUser = row?.is_user === true || (userName && String(row?.name || '') === userName);
+        if (!isUser) continue;
+        const text = typeof row?.mes === 'string' ? row.mes.trim() : '';
+        if (text) return text;
+    }
+    return '';
+}
+
+function withSyntheticLastUser(chat) {
+    if (!Array.isArray(chat)) return chat;
+    const lastUserText = lastUserTextFromContext();
+    if (!lastUserText) return chat;
+
+    let lastUserPromptText = '';
+    for (let i = chat.length - 1; i >= 0; i--) {
+        const msg = chat[i];
+        if (String(msg?.role || '') !== 'user') continue;
+        lastUserPromptText = contentText(msg?.content);
+        break;
+    }
+    if (lastUserPromptText === lastUserText) return chat;
+
+    return [
+        ...chat,
+        { role: 'user', content: lastUserText, identifier: 'pi_last_user' },
+    ];
+}
+
+function stripSyntheticRows(chat) {
+    if (!Array.isArray(chat)) return chat;
+    return chat.filter((msg) => String(msg?.identifier || '') !== 'pi_last_user');
 }
 
 function mountFormatted(json, formattedPane) {
@@ -113,6 +176,7 @@ function mountFormatted(json, formattedPane) {
 }
 
 async function showPromptInspector(input) {
+    if (consumeGenerationCancelled()) return input;
     const template = $(await renderExtensionTemplateAsync(path, 'template'));
     const textarea = template.find('#inspectPrompt');
     textarea.val(input);
@@ -173,14 +237,16 @@ async function showPromptInspector(input) {
 
 eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, async (data) => {
     if (!inspectEnabled || data.dryRun || !isChatCompletion()) return;
+    if (consumeGenerationCancelled()) return;
+    if (data?.__memu_cancelled === true) return;
 
-    const promptJson = JSON.stringify(data.chat);
+    const promptJson = JSON.stringify(withSyntheticLastUser(data.chat));
     const result = await showPromptInspector(promptJson);
 
     if (result === promptJson) return;
 
     try {
-        const chat = JSON.parse(result);
+        const chat = stripSyntheticRows(JSON.parse(result));
         if (Array.isArray(chat) && Array.isArray(data.chat)) {
             data.chat.length = 0;
             for (const item of chat) data.chat.push(item);
@@ -192,8 +258,18 @@ eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, async (data) => {
 
 eventSource.on(event_types.GENERATE_AFTER_COMBINE_PROMPTS, async (data) => {
     if (!inspectEnabled || data.dryRun || isChatCompletion()) return;
+    if (consumeGenerationCancelled()) return;
+    if (data?.__memu_cancelled === true) return;
     const result = await showPromptInspector(data.prompt);
     if (result !== data.prompt) data.prompt = result;
+});
+
+eventSource.on(event_types.GENERATION_STARTED, () => {
+    generationCancelled = false;
+});
+
+eventSource.on(event_types.GENERATION_STOPPED, () => {
+    generationCancelled = true;
 });
 
 (function init() {
