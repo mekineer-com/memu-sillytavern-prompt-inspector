@@ -53,6 +53,13 @@ function addLaunchButton() {
 let inspectEnabled = localStorage.getItem('promptInspectorEnabled') === 'true' || false;
 let generationCancelled = false;
 
+const MEMU_PROMPT_INSPECTOR_STATUS = {
+    SAVED: 'saved',
+    DISCARDED: 'discarded',
+    CANCELLED: 'cancelled',
+    DISABLED: 'disabled',
+};
+
 function consumeGenerationCancelled() {
     if (!generationCancelled) return false;
     generationCancelled = false;
@@ -176,7 +183,20 @@ function mountFormatted(json, formattedPane) {
 }
 
 async function showPromptInspector(input) {
-    if (consumeGenerationCancelled()) return input;
+    const result = await showPromptInspectorWithStatus(input);
+    if (result.status !== MEMU_PROMPT_INSPECTOR_STATUS.SAVED) {
+        return input;
+    }
+    return result.prompt;
+}
+
+async function showPromptInspectorWithStatus(input) {
+    if (consumeGenerationCancelled()) {
+        return {
+            status: MEMU_PROMPT_INSPECTOR_STATUS.CANCELLED,
+            prompt: input,
+        };
+    }
     const template = $(await renderExtensionTemplateAsync(path, 'template'));
     const textarea = template.find('#inspectPrompt');
     textarea.val(input);
@@ -228,12 +248,41 @@ async function showPromptInspector(input) {
         detachFormatted = null;
     }
 
-    if (!result) {
-        return input;
+    if (result === POPUP_RESULT.CANCELLED) {
+        return {
+            status: MEMU_PROMPT_INSPECTOR_STATUS.CANCELLED,
+            prompt: input,
+        };
     }
 
-    return String(textarea.val());
+    if (!result) {
+        return {
+            status: MEMU_PROMPT_INSPECTOR_STATUS.DISCARDED,
+            prompt: input,
+        };
+    }
+
+    return {
+        status: MEMU_PROMPT_INSPECTOR_STATUS.SAVED,
+        prompt: String(textarea.val()),
+    };
 }
+
+async function inspectPayloadJson(input) {
+    const prompt = String(input ?? '');
+    if (!inspectEnabled) {
+        return {
+            status: MEMU_PROMPT_INSPECTOR_STATUS.DISABLED,
+            prompt,
+        };
+    }
+    const result = await showPromptInspectorWithStatus(prompt);
+    return result;
+}
+
+(globalThis).memuPromptInspector = {
+    inspectPayloadJson,
+};
 
 eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, async (data) => {
     if (!inspectEnabled || data.dryRun || !isChatCompletion()) return;
