@@ -280,14 +280,9 @@ async function inspectPayloadJson(input) {
     return result;
 }
 
-(globalThis).memuPromptInspector = {
-    inspectPayloadJson,
-};
-
 eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, async (data) => {
     if (!inspectEnabled || data.dryRun || !isChatCompletion()) return;
     if (consumeGenerationCancelled()) return;
-    if (data?.__memu_cancelled === true) return;
 
     const promptJson = JSON.stringify(withSyntheticLastUser(data.chat));
     const result = await showPromptInspector(promptJson);
@@ -308,7 +303,6 @@ eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, async (data) => {
 eventSource.on(event_types.GENERATE_AFTER_COMBINE_PROMPTS, async (data) => {
     if (!inspectEnabled || data.dryRun || isChatCompletion()) return;
     if (consumeGenerationCancelled()) return;
-    if (data?.__memu_cancelled === true) return;
     const result = await showPromptInspector(data.prompt);
     if (result !== data.prompt) data.prompt = result;
 });
